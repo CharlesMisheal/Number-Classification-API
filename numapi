@@ -45,6 +45,5 @@ def classify_number():
         "fun_fact": get_fun_fact(num),
     }
     return jsonify(response), 200
-
 if __name__ == "__main__":
     app.run(debug=True)
