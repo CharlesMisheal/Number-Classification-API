@@ -12,7 +12,7 @@ mkdir -p /opt/number-api
 cd /opt/number-api
 
 # Clone the repository (replace with your repository URL)
-git clone https://github.com/MustaphaAgboola/number_api.git .
+git clone https://github.com/CharlesMisheal/Number-Classification-API/ .
 
 # Create and activate virtual environment
 python3 -m venv venv
