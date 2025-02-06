@@ -1,118 +1,85 @@
-from flask import Flask, jsonify, request
-from math import sqrt, isqrt
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 import requests
 
 app = Flask(__name__)
+CORS(app)  # Enable CORS for all routes
 
+# Function to check if a number is a prime number
 def is_prime(n):
-    n = abs(n) # Handle negative numbers
+    """Check if a number is prime."""
     if n < 2:
         return False
-    for i in range(2, isqrt(n) + 1):
+    for i in range(2, int(n ** 0.5) + 1):
         if n % i == 0:
             return False
     return True
 
+# Function to check if a number is a perfect number
 def is_perfect(n):
-    n = abs(n) # Handle negative numbers
-    if n <= 1:
+    """Check if a number is perfect."""
+    if n < 2:
         return False
-    sum_factors = sum(i for i in range(1, n) if n % i == 0)
-    return sum_factors == n
-
+    divisors = [i for i in range(1, n) if n % i == 0]
+    return sum(divisors) == n
+# Function to check if a number is an Armstrong number
 def is_armstrong(n):
-    n = abs(n) # Handle negative numbers
-    num_str = str(n)
-    power = len(num_str)
-    total = sum(int(digit) ** power for digit in num_str)
-    return total == n
+    """Check if a number is an Armstrong number."""
+    digits = [int(d) for d in str(n)]
+    power = len(digits)
+    return sum(d ** power for d in digits) == n
 
-def get_properties(n):
-    n = abs(n) # Handle negative numbers
-    properties = []
+# Function to calculate the sum of digits
+def digit_sum(n):
+    """Calculate the sum of digits."""
+    return sum(int(d) for d in str(n))
+
+# Function to get a fun fact about a number
+def get_fun_fact(n):
+    """Get a fun fact about a number."""
+    try:
+        response = requests.get(f"http://numbersapi.com/{n}/math?json")
+        if response.status_code == 200:
+            return response.json().get("text", "No fun fact available.")
+        return "No fun fact available."
+    except Exception:
+        return "Error fetching fun fact."
+
+@app.route("/")
+def home():
+    """Return a welcome message."""
+    return "Hello, your Flask API is running on Heroku!"
+# API endpoint
+@app.route('/api/classify-number', methods=['GET'])
+def classify_number():
+    """Classify a number based on its properties."""
+    number = request.args.get('number')
+    if not number:
+        return jsonify({"error": "Invalid input. Please provide a valid number."}), 400
+    try:
+        number = float(number)
+    except ValueError:
+        return jsonify({"error": "Invalid input. Please provide a valid number."}), 400
     
-    # Numeric sign property
-    properties.append("negative" if n < 0 else "positive")
-
-    if n % 2 == 0:
+    # Determine properties
+    properties = []
+    if is_armstrong(int(number)):
+        properties.append("armstrong")
+    if number % 2 == 0:
         properties.append("even")
     else:
         properties.append("odd")
-    
-    if is_armstrong(n):
-        properties.append("armstrong")
-    
-    if is_prime(n):
-        properties.append("prime")
-        
-    return properties
-
-def get_fun_fact(n):
-    original_n = n
-    n = abs(n)
-
-    if is_armstrong(n):
-        num_str = str(n)
-        power = len(num_str)
-        fact = f"{n} is an Armstrong number because "
-        parts = [f"{digit}^{power}" for digit in num_str]
-        fact += " + ".join(parts) + f" = {n}"
-        return fact
-    try:
-        response = requests.get(f"http://numbersapi.com/{n}/math")
-        return response.text
-    except:
-        return f"{n} is an interesting number!"
-
-def get_digit_sum(n):
-    return sum(int(d) for d in str(abs(n)))
-
-def process_number(input_number):
-    try:
-        number = int(input_number)
-
-        return {
-            "number": number,
-            "is_prime": is_prime(number),
-            "is_perfect": is_perfect(number),
-            "properties": get_properties(number),
-            "digit_sum": get_digit_sum(number),
-            "fun_fact": get_fun_fact(number)
-        }, 200
-    
-    except ValueError:
-        return {
-            "number": input_number,
-            "error": True,
-            "message": "Please provide a valid number"
-        }, 400
-
-# Original endpoint (keeping for backward compatibility)
-@app.route('/number/<int:input_number>')
-def number_properties(input_number):
-    response, status_code = process_number(input_number)
-    return jsonify(response), status_code
-
-# New endpoint with query parameter
-@app.route('/api/classify-number')
-def classify_number():
-    number = request.args.get('number')
-    if number is None:
-        return jsonify({
-            "error": True,
-            "message": "Query parameter 'number' is required"
-        }), 400
-    
-    response, status_code = process_number(number)
-    return jsonify(response), status_code
-
-# Error handler for all other exceptions
-@app.errorhandler(Exception)
-def handle_error(error):
-    return jsonify({
-        "error": True,
-        "message": "An unexpected error occurred"
-    }), 500
+         # Prepare response
+    response = {
+        "number": number,
+        "is_prime": is_prime(int(number)),
+        "is_perfect": is_perfect(int(number)),
+        "properties": properties,
+        "digit_sum": digit_sum(int(number)),
+        "fun_fact": get_fun_fact(int(number))
+    }
+    return jsonify(response), 200
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
+
