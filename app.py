@@ -1,111 +1,100 @@
 from fastapi import FastAPI, Query, HTTPException
-import requests
-from typing import Union
+from starlette.middleware.cors import CORSMiddleware
+from starlette.responses import JSONResponse
 
 app = FastAPI()
 
-# Helper functions
+# Enable CORS for all origins
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 def is_prime(n: int) -> bool:
-    if n < 2:
+    """Check if a number is prime."""
+    if n < 2 or n % 1 != 0:
         return False
-    for i in range(2, int(n**0.5) + 1):
+    for i in range(2, int(n ** 0.5) + 1):
         if n % i == 0:
             return False
     return True
 
 def is_perfect(n: int) -> bool:
-    if n < 2:
+    """Check if a number is a perfect number. 0 should NOT be perfect."""
+    if n <= 0 or n % 1 != 0:
         return False
-    return sum(i for i in range(1, n // 2 + 1) if n % i == 0) == n
+    return sum(i for i in range(1, int(n)) if int(n) % i == 0) == int(n)
 
 def is_armstrong(n: int) -> bool:
-    if n < 0:
-        return False  
-    digits = [int(d) for d in str(n)]
-    length = len(digits)
-    return sum(d ** length for d in digits) == n
+    """Check if a number is an Armstrong number."""
+    if n % 1 != 0:
+        return False
+    digits = [int(d) for d in str(abs(int(n)))]
+    return sum(d ** len(digits) for d in digits) == abs(int(n))
 
-def digit_sum(n: Union[int, float]) -> int:
-    return sum(int(d) for d in str(abs(int(n))))
+@app.get("/")
+def read_root():
+    """Handles requests to the root endpoint with a 400 Bad Request error."""
+    raise HTTPException(status_code=400, detail="Invalid endpoint. Use '/api/classify-number'")
 
-def get_fun_fact(n: int, properties: list) -> str:
-    """ Generate specific fun facts based on number properties. """
-    if "armstrong" in properties:
-        digits = [int(d) for d in str(n)]
-        length = len(digits)
-        breakdown = " + ".join(f"{d}^{length}" for d in digits)
-        return f"{n} is an Armstrong number because {breakdown} = {n}."
-
-    if "perfect" in properties:
-        divisors = [i for i in range(1, n // 2 + 1) if n % i == 0]
-        return f"{n} is a Perfect number because {n} = {' + '.join(map(str, divisors))}."
-
-    if "prime" in properties:
-        return f"{n} is a Prime number because it has exactly 2 divisors: 1 and {n}."
-
-    if "odd" in properties:
-        return f"{n} is an Odd number because it is not divisible by 2."
-
-    if "even" in properties:
-        return f"{n} is an Even number because it is divisible by 2."
-
-    # Fallback to numbers API
-    try:
-        url = f"http://numbersapi.com/{n}/math"
-        response = requests.get(url, timeout=5)
-        return response.text if response.status_code == 200 else "No fun fact available."
-    except requests.RequestException:
-        return "Could not fetch fun fact."
-
-# API endpoint
 @app.get("/api/classify-number")
-async def classify_number(number: str = Query(..., description="The number to classify")):
-    try:
-        num = float(number)
-        is_integer = num.is_integer()
-        num = int(num) if is_integer else num
-    except ValueError:
-        raise HTTPException(
+def classify_number(number: str = Query(..., description="Number to classify")):
+    """API Endpoint to classify a number."""
+    
+    # Validate number format
+    if not number.replace(".", "").replace("-", "").isdigit():
+        return JSONResponse(
             status_code=400,
-            detail={
-                "number": number,
-                "error": True,
-                "message": "Invalid number format"
-            }
+            content={"number": number, "error": True, "message": "Invalid number format"},
+        )
+    
+    try:
+        number = float(number)
+        if number % 1 == 0:
+            number = int(number)
+    except Exception:
+        return JSONResponse(
+            status_code=400,
+            content={"number": number, "error": True, "message": "Invalid number format"},
         )
 
     properties = []
-    prime_status, perfect_status, armstrong_status = None, None, None
-
-    if is_integer:
-        num_int = int(num)
-        prime_status = is_prime(num_int)
-        perfect_status = is_perfect(num_int)
-        armstrong_status = is_armstrong(num_int)
-        properties.extend(filter(None, [
-            "prime" if prime_status else None,
-            "perfect" if perfect_status else None,
-            "armstrong" if armstrong_status else None,
-            "odd" if num_int % 2 != 0 else "even"
-        ]))
+    
+    if is_armstrong(number):
+        properties.append("armstrong")
+    if number % 2 == 0:
+        properties.append("even")
     else:
-        properties.append("floating-point")
+        properties.append("odd")
 
-    fun_fact = get_fun_fact(num, properties)
+    if is_armstrong(number):
+        digits = [int(d) for d in str(abs(int(number)))]
+        powers = " + ".join([f"{d}^{len(digits)}" for d in digits])
+        fun_fact = f"{number} is an Armstrong number because {powers} = {number}"
+    else:
+        fun_fact = f"{number} is not an Armstrong number."
 
-    return {
-        "number": num,
-        "is_prime": prime_status if is_integer else None,
-        "is_perfect": perfect_status if is_integer else None,
-        "is_armstrong": armstrong_status if is_integer else None,
+    response = {
+        "number": number,
+        "is_prime": is_prime(number),
+        "is_perfect": is_perfect(number),
         "properties": properties,
-        "digit_sum": digit_sum(num),
+        "digit_sum": sum(map(int, str(abs(int(number))))),
         "fun_fact": fun_fact
     }
 
+    return JSONResponse(status_code=200, content=response)
 
+@app.exception_handler(422)
+async def validation_exception_handler(request, exc):
+    """Ensures invalid inputs return a 400 Bad Request."""
+    return JSONResponse(
+        status_code=400,
+        content={"error": True, "message": "Invalid input. Please provide a valid number."},
+    )
 
-# Run the app
-if __name__ == "__main__":
-     import uvicorn
-     uvicorn.run(app, host="127.0.0.1", port=8000)
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
